@@ -1,5 +1,5 @@
 ============================================================
-    OFFICIAL DOCUMENTATION OF THE NEUTRALIS LANGUAGE (v2.0.1)
+    OFFICIAL DOCUMENTATION OF THE NEUTRALIS LANGUAGE (v2.0.2)
 ============================================================
 
 Welcome to Neutralis — an incredibly fast, dynamically typed language powered by a stack-based Virtual Machine (VM), designed specifically for embedding into game engines and high-load systems.
