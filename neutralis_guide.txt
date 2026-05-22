@@ -1,0 +1,200 @@
+============================================================
+    OFFICIAL DOCUMENTATION OF THE NEUTRALIS LANGUAGE (v2.0.1)
+============================================================
+
+Welcome to Neutralis — an incredibly fast, dynamically typed language powered by a stack-based Virtual Machine (VM), designed specifically for embedding into game engines and high-load systems.
+
+TABLE OF CONTENTS:
+1. Basic Syntax and Data Types
+2. Control Structures (If, While, For)
+3. Functions
+4. Tuples, Dictionaries, and Buffers
+5. Standard Library
+6. WARNINGS AND COMMON ERRORS (Mandatory Reading!)
+7. Best Optimization Practices
+
+
+============================================================
+1. BASIC SYNTAX AND DATA TYPES
+============================================================
+
+* CASE-INSENSITIVITY: The language is completely case-insensitive (if, IF, health, HeAlTh are all the same).
+* CODE BLOCKS: All blocks open with the word `do` and must strictly close with the word `eofl`.
+* COMMENTS: `// comment` or `# comment`.
+
+DATA TYPES:
+* FLOAT: All numbers in the language are C++ floating-point numbers (e.g., `42.0`, `-3.14`).
+* BOOLEAN: `true` or `false`.
+* STRING: Dynamic strings enclosed in double quotes (`"Hello"`).
+* VEC2: 2D Vector. Access to axes is handled via dot notation: `v = vec2(10.0, 20.0)` -> `v.x`, `v.y`.
+* TUPLE: Arrays (Lists). INDEXED FROM ONE (1). `arr = tuple(1, 2, 3)`.
+* DICT: Dictionaries (Objects). Fast structures based on Hidden Classes. `obj = dict()`.
+* BUFFER: Ultra-fast pieces of raw memory for mass text concatenation.
+
+============================================================
+2. CONTROL STRUCTURES
+============================================================
+
+CONDITIONS (IF / ELSE):
+    hp = 50.0
+    if hp <= 0.0 do
+        print("Dead")
+    else do
+        print("Alive")
+    eofl
+
+WHILE LOOP:
+    count = 0.0
+    while count < 5.0 do
+        count = count + 1.0
+        if count == 3.0 do continue eofl // Skip iteration
+    eofl
+
+FOR LOOP:
+The syntax strictly requires an explicit comparison operator (`<`, `<=`, `>`, `>=`).
+    for i = 1.0 <= 10.0 do
+        if i == 5.0 do break eofl // Exit loop
+        print("Step: ", i)
+    eofl
+
+============================================================
+3. FUNCTIONS
+============================================================
+
+BLOCK FUNCTION:
+    calculate_damage(base, armor) do
+        return base - armor
+    eofl
+
+INLINE FUNCTION (Short notation):
+    square(x) = x * x eofl
+
+RETURNING MULTIPLE VALUES (Unpacking):
+    get_coords() do
+        return tuple(15.0, 30.0)
+    eofl
+    x, y = get_coords()
+
+============================================================
+4. DATA STRUCTURES
+============================================================
+
+ARRAYS (TUPLE):
+Based on C++ `std::vector`. Ideal for lists, grids, and mathematics.
+ATTENTION: Indexing starts from 1!
+
+    arr = tuple("a", "b")
+    push(arr, "c")      // Add to the end
+    last = pop(arr)     // Remove from the end and return it ("c")
+    print(arr[1.0])     // Returns "a"
+    print(len(arr))     // Returns 2.0
+
+DICTIONARIES (DICT):
+Key-value objects. Keys are strictly STRINGS.
+They support ultra-fast access via dot notation (Inline Caching).
+
+    player = dict()
+    player.name = "Hero"        // Fast access
+    
+    prop_name = "name"
+    print(player[prop_name])    // Dynamic access
+
+    has_hp = has_prop(player, "hp") // Check property existence
+    del_prop(player, "name")        // Remove property
+    clean(player)                   // Wipe dictionary entirely
+
+MEMORY BUFFERS (BUFFER):
+Designed for execution loops with tens of thousands of iterations (file/log concatenation). Operates directly with RAM.
+
+    b = buffer(1000.0)     // Allocate 1000 bytes
+    buf_write(b, "Hello ") // Instant write operation
+    buf_write(b, "World")
+    text = buf_string(b)   // Convert to string
+
+============================================================
+5. STANDARD LIBRARY
+============================================================
+
+[ CONSOLE AND DEBUGGING ]
+* print(args...)   — Output with spaces and a newline character (\n).
+* write(args...)   — Output without spaces and without a newline character.
+* logs(val)        — Deep object dump (displays data types and all dictionary fields).
+* type()           — Pauses the script, awaits text input from the console.
+* assert(cond, msg)— Strict script termination (crash) if `cond` is false.
+
+[ MATHEMATICS ]
+* sin(x), cos(x), abs(x)
+* min(a, b), max(a, b), clamp(val, min, max), lerp(start, end, t)
+* random()             — Random number within the range [0.0, 1.0].
+* random(min to max)   — Syntactic sugar where `to` acts as a comma. `random(1.0 to 10.0)`.
+* bit_shl(val, shift)  — Bitwise shift left (<<).
+* bit_or(v1, v2)       — Bitwise OR (|).
+
+[ STRINGS ]
+* str_concat(a, b...)   — Classical string concatenation (allocates a new string object).
+* str_append(base, add) — Mutates the string in-place (extremely fast).
+* str_len(str)          — String length.
+* str_sub(s, start, len)— Substring. ATTENTION: The `start` index counts from 0!
+* to_num(str)           — Safe conversion of string to float.
+* to_str(val)           — Explicitly converts any data type to a string.
+
+[ FILES AND MODULES ]
+* call("lib_name")      — Loads and runs a script from the `C:\NeuLibs\` directory.
+* fread(path)           — Reads a file into a string (returns `nil` on error).
+* fwrite(path, data)    — Writes a string into a file (returns `true`/`false`).
+
+[ REFLECTION AND METAPROGRAMMING ]
+* eval("code")          — Compiles and executes a string directly at runtime!
+* ret(val)              — Returns a string containing the type name ("float", "string", "dict", "tuple"...).
+* is_a(val, type)       — Returns `true` if the type matches (`is_a(val, "float")`).
+* check_null(val)       — Returns `true` if the value is equal to `nil`.
+
+[ ENGINE AND ECS (CHAINING) ]
+* get_dt()              — Returns Delta Time.
+* create(), destroy(id) — Entity lifecycle management.
+Syntactic sugar (Chaining): commands are chained to an entity ID using the `+` operator.
+    entity = create()
+    entity + rotate(90.0) + scale(2.0, 2.0) + set_color("red")
+
+
+============================================================
+6. WARNINGS AND COMMON ERRORS (MUST READ)
+============================================================
+The Neutralis language is highly flexible, but it does not forgive architectural flaws. Here are the top 5 bugs you might encounter:
+
+⚠️ ERROR 1: THE FORGOTTEN `eofl`
+All code blocks, functions (even single-line inline expressions), and conditions rigidly require an `eofl` token.
+BAD:  `if a < b do print("Yes")` (Triggers a Syntax Error)
+GOOD: `if a < b do print("Yes") eofl`
+
+⚠️ ERROR 2: STRING INDEXING (0) VS ARRAY INDEXING (1)
+In Neutralis, arrays (Tuples) are indexed starting from ONE (1.0).
+However, the underlying C++ function `str_sub(str, start, len)` used for string mutation counts characters starting from ZERO (0.0)!
+    arr = tuple("A", "B")
+    print(arr[1.0])          // Returns "A"
+    
+    text = "Hello"
+    print(str_sub(text, 0.0, 1.0)) // Returns "H"
+
+⚠️ ERROR 3: USING DICT FOR GRIDS AND ARRAYS
+If you are implementing a 2D grid for a game, NEVER use `dict()`. 
+Dictionaries force keys to be string expressions. Writing `grid[1.0]` forces the VM to convert `1.0` to the string `"1.0"`, allocate memory, compute a hash, and perform a slow lookup routine.
+Use `tuple()`! It runs directly on top of memory layouts (Pointer Arithmetic) and accesses elements instantaneously.
+
+⚠️ ERROR 4: STRING CONCATENATION INSIDE LARGE LOOPS
+The `str_concat()` function constructs a entirely NEW copy of the string in memory. 
+If you append 50,000 strings sequentially inside a loop, the VM will generate gigabytes of garbage data, causing the script to hang for up to 5 seconds.
+BAD:  `str = str_concat(str, "a")`
+GOOD: `str_append(str, "a")` (mutates the string in-place within 0.001 seconds).
+IDEAL: `buf_write(b, "a")` (operates via raw byte buffers for ultimate hardware speeds).
+
+⚠️ ERROR 5: CALLING A VARIABLE AS A FUNCTION (OP_CALL FAILED)
+If you assign `val = nil` and accidentally invoke it as a function `val()`, the virtual machine will strictly crash with an "Cannot call variable or undefined function" exception. Always validate your dynamic objects with `check_null()` before invoking runtime callbacks!
+
+
+============================================================
+7. BEST OPTIMIZATION PRACTICES
+============================================================
+1. PRE-ALLOCATING MEMORY: If you anticipate a massive string workload, initialize a `buffer(size)` to reserve the necessary RAM blocks upfront, shielding your engine from garbage collection (GC) cycles.
+2. EXPLICIT DOT ACCESS: Instead of utilizing `player["hp"]`, always prefer writing `player.hp`. Dot-notation compiles into dedicated instructions optimized via Inline Caching, bypassing hash-map lookups entirely (making it up to 10x faster).
+3. CLEANING INSTEAD OF RE-ALLOCATING: If you need to reset a large dictionary structure, do not declare `player = dict()` (which spawns an entirely new allocation memory layout). Use the `clean(player)` command instead. This preserves the persistent instance in memory but instantly clears its inner fields, heavily reducing garbage collection overhead.
