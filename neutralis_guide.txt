@@ -1,200 +1,531 @@
-============================================================
-    OFFICIAL DOCUMENTATION OF THE NEUTRALIS LANGUAGE (v2.0.2)
-============================================================
+###############################################################################
+#                                                                             #
+#              OFFICIAL DOCUMENTATION OF THE NEUTRALIS LANGUAGE               #
+#                                Version 2.0.3                                #
+#                                                                             #
+###############################################################################
 
-Welcome to Neutralis — an incredibly fast, dynamically typed language powered by a stack-based Virtual Machine (VM), designed specifically for embedding into game engines and high-load systems.
+Welcome to Neutralis — a high-performance, stack-based scripting language. 
+Neutralis v2.0.3 is a state-of-the-art Register-based Virtual Machine. 
+Unlike traditional stack-based VMs (like Python or early Lua), Neutralis 
+minimizes memory traffic by performing operations directly on virtual 
+registers. This architecture, combined with Hidden Classes (Shapes) 
+and a Zero-Allocation Standard Library, allows for near-native performance 
+in compute-heavy scenarios such as game physics and logic.
 
-TABLE OF CONTENTS:
-1. Basic Syntax and Data Types
-2. Control Structures (If, While, For)
-3. Functions
-4. Tuples, Dictionaries, and Buffers
-5. Standard Library
-6. WARNINGS AND COMMON ERRORS (Mandatory Reading!)
-7. Best Optimization Practices
+Memory Architecture: Non-compacting Mark-Sweep GC with Global String Interning.
 
+===============================================================================
+I. CORE CONCEPTS AND PHILOSOPHY
+===============================================================================
 
-============================================================
-1. BASIC SYNTAX AND DATA TYPES
-============================================================
+* CASE-INSENSITIVITY: Neutralis does not care about character case. 
+  `PLAYER_HP` and `player_hp` are the same.
+* BLOCK STRUCTURE: Blocks use `do` ... `end`.
+  The keyword `eofl` must appear exactly once at the end of your script.
+* REGISTERS: Each function has access to 256 local registers. The compiler 
+  maps your local variables to these registers automatically.
+* INDICES: Tuples use 1-based indexing (`t[1.0]`). Strings use 0-based 
+  indexing for `str_sub`.
 
-* CASE-INSENSITIVITY: The language is completely case-insensitive (if, IF, health, HeAlTh are all the same).
-* CODE BLOCKS: All blocks open with the word `do` and must strictly close with the word `eofl`.
-* COMMENTS: `// comment` or `# comment`.
+===============================================================================
+II. PERFORMANCE PILLARS (HOW TO WRITE FAST CODE)
+===============================================================================
 
-DATA TYPES:
-* FLOAT: All numbers in the language are C++ floating-point numbers (e.g., `42.0`, `-3.14`).
-* BOOLEAN: `true` or `false`.
-* STRING: Dynamic strings enclosed in double quotes (`"Hello"`).
-* VEC2: 2D Vector. Access to axes is handled via dot notation: `v = vec2(10.0, 20.0)` -> `v.x`, `v.y`.
-* TUPLE: Arrays (Lists). INDEXED FROM ONE (1). `arr = tuple(1, 2, 3)`.
-* DICT: Dictionaries (Objects). Fast structures based on Hidden Classes. `obj = dict()`.
-* BUFFER: Ultra-fast pieces of raw memory for mass text concatenation.
+1. PROPERTY ACCESS (SHAPES/HIDDEN CLASSES)
+   Neutralis uses "Shapes" to optimize dictionary access. When you write 
+   `player.hp`, the VM memorizes where `hp` is located in memory.
+   - ALWAYS USE: `obj.property` for fixed keys.
+   - AVOID: `obj["property"]` unless the key is truly dynamic. Index access 
+     bypasses the Inline Cache and triggers a slower search.
 
-============================================================
-2. CONTROL STRUCTURES
-============================================================
+2. STRING INTERNING
+   All strings in Neutralis are "interned". This means there is only one 
+   copy of the string "hello" in memory, no matter how many times it appears.
+   - BENEFIT: Comparing two strings (`str1 == str2`) is as fast as 
+     comparing two numbers because the VM just compares their memory addresses.
+   - CAVEAT: Strings are immutable. Creating a new string from two others 
+     is expensive.
 
-CONDITIONS (IF / ELSE):
-    hp = 50.0
-    if hp <= 0.0 do
-        print("Dead")
-    else do
-        print("Alive")
-    eofl
+3. THE BUFFER PATTERN
+   For heavy string building (UI, logs, JSON), NEVER use `+`.
+   - BAD:  `s = s + "data"` (allocates a new string every time).
+   - GOOD: Use `buffer` and `buf_write`. This writes data directly into 
+     pre-allocated memory.
 
-WHILE LOOP:
-    count = 0.0
-    while count < 5.0 do
-        count = count + 1.0
-        if count == 3.0 do continue eofl // Skip iteration
-    eofl
+4. VEC2 LITERALS
+   Neutralis supports ultra-fast vector literals.
+   - `pos = 10.0 20.0` is compiled into a single instruction. It is much 
+     faster than calling `vec2(10.0, 20.0)`.
 
-FOR LOOP:
-The syntax strictly requires an explicit comparison operator (`<`, `<=`, `>`, `>=`).
-    for i = 1.0 <= 10.0 do
-        if i == 5.0 do break eofl // Exit loop
-        print("Step: ", i)
-    eofl
+===============================================================================
+III. PRIMITIVE DATA TYPES
+===============================================================================
 
-============================================================
-3. FUNCTIONS
-============================================================
+1. FLOAT: 64-bit double precision (NaN Boxed).
+2. BOOLEAN: `true` / `false`.
+3. NIL: The absence of a value.
+4. STRING: Interned character sequences.
+5. VEC2: Native 2D vector object (optimized for physics).
+6. TUPLE: Dynamic array (1-indexed).
+7. DICT: Key-value map with Hidden Class optimization.
+8. BUFFER: Growable memory block for string processing.
 
-BLOCK FUNCTION:
-    calculate_damage(base, armor) do
-        return base - armor
-    eofl
+===============================================================================
+IV. ADVANCED SCOPING AND FUNCTIONS
+===============================================================================
 
-INLINE FUNCTION (Short notation):
-    square(x) = x * x eofl
+Variables are global by default unless they are parameters or defined 
+within a loop. However, the compiler optimizes local register usage 
+within function blocks.
 
-RETURNING MULTIPLE VALUES (Unpacking):
-    get_coords() do
-        return tuple(15.0, 30.0)
-    eofl
-    x, y = get_coords()
+Function Definition:
+    my_func(a, b) do
+        res = (a * a) + (b * b)
+        return res
+    end
 
-============================================================
-4. DATA STRUCTURES
-============================================================
+Closures:
+    Native hooks can capture C++ context, but within Neutralis, functions 
+    are first-class citizens. You can pass them as arguments.
 
-ARRAYS (TUPLE):
-Based on C++ `std::vector`. Ideal for lists, grids, and mathematics.
-ATTENTION: Indexing starts from 1!
+===============================================================================
+V. THE ECS CHAINING SYNTAX
+===============================================================================
 
-    arr = tuple("a", "b")
-    push(arr, "c")      // Add to the end
-    last = pop(arr)     // Remove from the end and return it ("c")
-    print(arr[1.0])     // Returns "a"
-    print(len(arr))     // Returns 2.0
+Neutralis provides a unique "Chaining" operator `+` specifically for 
+Entity-Component Systems.
 
-DICTIONARIES (DICT):
-Key-value objects. Keys are strictly STRINGS.
-They support ultra-fast access via dot notation (Inline Caching).
+    # This syntax allows for extremely readable entity configuration
+    player = create()
+    player + set_pos(0.0 0.0) + set_hp(100.0) + add_tag("hero")
+
+This works because `+` on a number (entity ID) and a tuple (command) 
+executes the command and returns the entity ID for the next link.
+
+===============================================================================
+VI. OPTIMIZATION CHECKLIST
+===============================================================================
+
+[ ] Did I use `do ... end` for all blocks?
+[ ] Are my high-frequency property accesses using `.` instead of `[]`?
+[ ] Am I using `buffer` for large string concatenations?
+[ ] Am I using vec2 literals (`x y`) instead of function calls?
+[ ] Is `eofl` present at the very end of the file?
+
+===============================================================================
+VII. CORE API REFERENCE (v2.0.2)
+===============================================================================
+
+* random(min to max) - Fast integer random.
+* randomf(min to max) - Fast float random.
+* clock() - Returns CPU ticks for benchmarking.
+* sys_gc() - Returns time spent in GC (ms).
+* type() - Read from stdin.
+* logs(val) - Deep debug of any object.
+* keys(dict) - Returns a tuple of all active property names in a dictionary.
+* assert(cond, msg) - [OpCode] Breaks execution if condition is false.
+
+===============================================================================
+VIII. NEW IN VERSION 2.0.3 (THE LINTER & ITERATORS)
+===============================================================================
+
+1. PANIC MODE & MULTI-ERROR REPORTING
+   The parser no longer dies after the first typo. It uses a synchronization 
+   mechanism to "skip" broken code and find subsequent errors.
+   - FEATURE: "Context Stack" tells you exactly where the error happened.
+     Example: `[Syntax Error] ... in context: for loop -> block -> expression`.
+
+2. HARDWARE ITERATORS (for-in)
+   Version 2.0.3 introduces the `OP_ITER` instruction. It is up to 4x faster 
+   than manual indexing.
+   
+   Syntax:
+       my_list = tuple("A", "B", "C")
+       for item in my_list do
+           print(item)
+       end
+   
+   Supported types: Tuples and Strings.
+
+3. NATIVE ASSERTIONS
+   `assert()` is no longer a slow function call. It is a VM OpCode.
+   Validation in libraries is now practically free.
+   
+   Example:
+       divide(a, b) do
+           assert(b != 0.0, "Zero division attempt!")
+           return a / b
+       end
+
+4. STATIC ANALYSIS (THE LINTER)
+   The compiler now enforces performance best practices:
+   
+   - STRING CONCAT ERROR: Using `+` with strings inside any loop triggers 
+     a Compiler Error. You MUST use `buffer`.
+   - DICT EFFICIENCY WARNING: Using `obj["prop"]` with a constant string 
+     triggers a Warning. The compiler suggests `obj.prop` for Shape optimization.
+   - REGISTER OVERFLOW: If a function uses more than 256 variables/temporaries, 
+     compilation fails before the VM even starts.
+
+5. ZERO-DIVISION PROTECTION
+   - Compile-time: `x = 1 / 0` triggers a Constant Folding error.
+   - Runtime: Dynamic zero division throws a clean "Division by zero" 
+     exception with a line number instead of crashing the process.
+
+===============================================================================
+IX. DEBUGGER & SOURCE MAPPING
+===============================================================================
+
+Neutralis now maintains a complete Source Map. Every OpCode is linked to a 
+line number in the `.neu` file.
+
+Runtime errors now provide a full trace:
+`Runtime Error at line 42: Unknown command 'pint' (did you mean 'print'?)`
+
+Debugger support:
+The VM now supports hardware breakpoints. When an instruction offset is 
+added to the `breakpoints` set, the VM automatically enters a `pause()` state.
+
+===============================================================================
+X. ADVANCED REFLECTION
+===============================================================================
+
+Use `keys()` for serialization or debugging:
 
     player = dict()
-    player.name = "Hero"        // Fast access
+    player.hp = 100.0
+    player.name = "Hero"
     
-    prop_name = "name"
-    print(player[prop_name])    // Dynamic access
+    all_props = keys(player) # returns ["hp", "name"]
+    for k in all_props do
+        print("Field: ", k, " Value: ", player[k])
+    end
 
-    has_hp = has_prop(player, "hp") // Check property existence
-    del_prop(player, "name")        // Remove property
-    clean(player)                   // Wipe dictionary entirely
+===============================================================================
+XI. PERFORMANCE BENCHMARK (v2.0.3 REFERENCE)
+===============================================================================
 
-MEMORY BUFFERS (BUFFER):
-Designed for execution loops with tens of thousands of iterations (file/log concatenation). Operates directly with RAM.
+As of version 2.0.3, Neutralis achieves the following metrics on a standard 
+N^2 physics stress test (400 entities, 160,000 interaction checks):
 
-    b = buffer(1000.0)     // Allocate 1000 bytes
-    buf_write(b, "Hello ") // Instant write operation
-    buf_write(b, "World")
-    text = buf_string(b)   // Convert to string
+* Total VM Execution Time: ~314 ms
+* Effective Throughput: ~35 MIPS (Million Instructions Per Second)
+* Instruction Latency (Avg):
+    - OP_MOVE / OP_ADD: 0.022 us
+    - OP_GET_PROPERTY:  0.023 us (Shape Optimized)
+    - OP_CALL:          0.470 us (Heavy)
 
-============================================================
-5. STANDARD LIBRARY
-============================================================
+Key takeaway: The VM is highly efficient at math and property access. 
+The current bottleneck is Global Variable lookup.
 
-[ CONSOLE AND DEBUGGING ]
-* print(args...)   — Output with spaces and a newline character (\n).
-* write(args...)   — Output without spaces and without a newline character.
-* logs(val)        — Deep object dump (displays data types and all dictionary fields).
-* type()           — Pauses the script, awaits text input from the console.
-* assert(cond, msg)— Strict script termination (crash) if `cond` is false.
+===============================================================================
+XII. PROFILER USAGE
+===============================================================================
 
-[ MATHEMATICS ]
-* sin(x), cos(x), abs(x)
-* min(a, b), max(a, b), clamp(val, min, max), lerp(start, end, t)
-* random()             — Random number within the range [0.0, 1.0].
-* random(min to max)   — Syntactic sugar where `to` acts as a comma. `random(1.0 to 10.0)`.
-* bit_shl(val, shift)  — Bitwise shift left (<<).
-* bit_or(v1, v2)       — Bitwise OR (|).
+To analyze your script's performance:
+1. Call `start_profiler()` before the hot loop.
+2. Call `stop_profiler()` after the loop.
+3. Check `profiler_report.txt` generated in your executable's directory.
+
+The report lists Opcodes sorted by "Total Time", allowing you to see 
+exactly which operations are slowing down your game logic.
+
+===============================================================================
+XIII. VIRTUAL MACHINE SPECIFICATIONS
+===============================================================================
+
+Loops are highly optimized. Neutralis supports `while` and a unique `for`.
+
+WHILE Loop Example:
+    i = 0.0
+    while i < 10.0 do
+        i = i + 1.0
+        if i == 5.0 do continue end  # Skip 5
+        if i == 8.0 do break end     # Stop at 8
+        print("Counter: ", i)
+    end
+
+FOR Loop Example:
+The FOR loop in Neutralis is slightly different from C. It requires a 
+comparison operator in its header.
+
+    # This loop starts at 1, goes up to 10 inclusive, increments by 1
+    for i = 1.0 <= 10.0 do
+        print("Iteration: ", i)
+    end
+
+    # Downward loop
+    for k = 10.0 >= 0.0 do
+        print("Countdown: ", k)
+    end
+
+===============================================================================
+IV. FUNCTIONS AND SCOPE
+===============================================================================
+
+Neutralis supports multi-line functions and concise one-liners.
+
+Block Function:
+    calculate_hypotenuse(a, b) do
+        result = sin(a) + cos(b) # Random math example
+        return result
+    end
+
+Inline Function (The "Fat Arrow" equivalent):
+    multiply(a, b) = a * b end
+
+Recursion:
+    factorial(n) do
+        if n <= 1.0 do return 1.0 end
+        return n * factorial(n - 1.0)
+    end
+
+Unpacking Multi-return:
+    get_stats() do
+        return tuple(100.0, "Legendary", true)
+    end
+
+    hp, rank, is_alive = get_stats()
+
+===============================================================================
+V. DATA STRUCTURES (TUPLES, DICTS, BUFFERS)
+===============================================================================
+
+1. TUPLES (Arrays)
+   Tuples are dynamic lists. 
+   IMPORTANT: Indexing starts at 1.0!
+
+    inventory = tuple("Sword", "Shield", "Potion")
+    print(inventory[1.0]) # Prints Sword
+    
+    push(inventory, "Bow")
+    print("Items: ", len(inventory)) # Prints 4.0
+    
+    item = pop(inventory) # item is "Bow"
+
+2. DICTIONARIES (Hidden Class Objects)
+   Dicts are key-value maps. They use "Shapes" for optimization.
+   Always use Dot-Access (`obj.prop`) for maximum speed.
+
+    monster = dict()
+    monster.hp = 250.0
+    monster.name = "Orc"
+    
+    # Dynamic access via brackets
+    key = "hp"
+    print(monster[key]) # Prints 250.0
+    
+    # Helper functions
+    if has_prop(monster, "mana") do
+        print("It has mana!")
+    else do
+        monster.mana = 50.0
+    end
+    
+    del_prop(monster, "name")
+    clean(monster) # Instantly clears all fields without GC pressure
+
+3. BUFFERS (High-Load String processing)
+   Standard string concatenation (`+`) creates a new string object. 
+   In a loop of 10,000 iterations, this is deadly. Use Buffers instead.
+
+    b = buffer(2048.0) # Pre-allocate 2KB
+    for i = 1.0 <= 1000.0 do
+        buf_write(b, "Line number: ", i, "\n")
+    end
+    final_text = buf_string(b)
+    buf_clear(b) # Ready for reuse
+
+===============================================================================
+VI. THE STANDARD LIBRARY
+===============================================================================
+
+[ SYSTEM & I/O ]
+* print(...)        - Outputs data to console with space separator + newline.
+* write(...)        - Outputs raw data without separators or newline.
+* logs(val)         - Full diagnostic dump of a value (useful for Dicts/Tuples).
+* time()            - Seconds since the epoch.
+* clock()           - Processor ticks (CPU time).
+* path()            - Current executable directory.
+* fread(path)       - Reads entire file into string. Returns nil on error.
+* fwrite(path, str) - Writes string to file. Returns true/false.
+* type()            - Console Input. Execution stops until Enter is pressed.
+* pause()           - Suspends script execution at the current line until resume() is called.
+* resume()          - Wakes up the script from a pause() state.
+
+[ MATH ]
+* abs(x)            - Absolute value.
+* sin(x) / cos(x)   - Trigonometric functions (radians).
+* min(a, b) / max(a, b)
+* clamp(v, lo, hi)  - Keeps v between lo and hi.
+* lerp(a, b, t)     - Linear interpolation.
+* random(min to max)- Returns a discrete INTEGER between min and max (inclusive).
+* random()          - Returns 0 or 1 (integer).
+* randomf()         - Returns a float between 0.0 and 1.0.
+* randomf(min to max)- Returns a float between min and max.
+* bit_shl(v, s)     - Bitwise shift left.
+* bit_or(v1, v2)    - Bitwise OR.
 
 [ STRINGS ]
-* str_concat(a, b...)   — Classical string concatenation (allocates a new string object).
-* str_append(base, add) — Mutates the string in-place (extremely fast).
-* str_len(str)          — String length.
-* str_sub(s, start, len)— Substring. ATTENTION: The `start` index counts from 0!
-* to_num(str)           — Safe conversion of string to float.
-* to_str(val)           — Explicitly converts any data type to a string.
+* str_concat(a, b)  - Joins two strings.
+* str_append(a, b)  - Mutates string 'a' in-place (very fast).
+* str_len(s)        - Length of the string.
+* str_sub(s, start, len) - Substring. NOTE: 'start' is 0-indexed here!
+* to_str(v)         - Explicit conversion to string.
+* to_num(s)         - Explicit conversion to float (safe).
 
-[ FILES AND MODULES ]
-* call("lib_name")      — Loads and runs a script from the `C:\NeuLibs\` directory.
-* fread(path)           — Reads a file into a string (returns `nil` on error).
-* fwrite(path, data)    — Writes a string into a file (returns `true`/`false`).
+[ REFLECTION ]
+* is_a(val, "type") - Type checking ("float", "string", "dict", "tuple", "vec2", "buffer").
+* check_null(v)     - Returns true if v is nil.
+* ret(v)            - Returns the type name of v as a string.
+* eval("code")      - Compiles and runs string as code in current scope.
+* call("lib")       - Loads and executes script from C:\NeuLibs\.
 
-[ REFLECTION AND METAPROGRAMMING ]
-* eval("code")          — Compiles and executes a string directly at runtime!
-* ret(val)              — Returns a string containing the type name ("float", "string", "dict", "tuple"...).
-* is_a(val, type)       — Returns `true` if the type matches (`is_a(val, "float")`).
-* check_null(val)       — Returns `true` if the value is equal to `nil`.
+[ MEMORY ]
+* sys_gc()          - Manual garbage collection trigger. Returns GC duration (ms).
+* sys_memory()      - Current Memory Arena usage in bytes.
 
-[ ENGINE AND ECS (CHAINING) ]
-* get_dt()              — Returns Delta Time.
-* create(), destroy(id) — Entity lifecycle management.
-Syntactic sugar (Chaining): commands are chained to an entity ID using the `+` operator.
-    entity = create()
-    entity + rotate(90.0) + scale(2.0, 2.0) + set_color("red")
+===============================================================================
+VII. GAME ENGINE INTEGRATION (ECS & CHAINING)
+===============================================================================
 
+Neutralis is designed for Entity-Component Systems. It uses a "Chaining" 
+syntax where the `+` operator acts as a pipe for entity commands.
 
-============================================================
-6. WARNINGS AND COMMON ERRORS (MUST READ)
-============================================================
-The Neutralis language is highly flexible, but it does not forgive architectural flaws. Here are the top 5 bugs you might encounter:
-
-⚠️ ERROR 1: THE FORGOTTEN `eofl`
-All code blocks, functions (even single-line inline expressions), and conditions rigidly require an `eofl` token.
-BAD:  `if a < b do print("Yes")` (Triggers a Syntax Error)
-GOOD: `if a < b do print("Yes") eofl`
-
-⚠️ ERROR 2: STRING INDEXING (0) VS ARRAY INDEXING (1)
-In Neutralis, arrays (Tuples) are indexed starting from ONE (1.0).
-However, the underlying C++ function `str_sub(str, start, len)` used for string mutation counts characters starting from ZERO (0.0)!
-    arr = tuple("A", "B")
-    print(arr[1.0])          // Returns "A"
+    # Create an NPC and apply transformations
+    npc = create()
+    npc + set_pos(100.0, 200.0) + rotate(45.0) + scale(1.5) + set_color("blue")
     
-    text = "Hello"
-    print(str_sub(text, 0.0, 1.0)) // Returns "H"
+    # Commands like rotate() actually return a command tuple:
+    # rotate(45.0) -> ["cmd_rotate", 45.0]
+    
+    # Moving with physics
+    apply_force(npc, vec2(10.0, 0.0))
+    
+    # Visual Debugging
+    draw_debug_circle(get_pos(npc), 50.0)
 
-⚠️ ERROR 3: USING DICT FOR GRIDS AND ARRAYS
-If you are implementing a 2D grid for a game, NEVER use `dict()`. 
-Dictionaries force keys to be string expressions. Writing `grid[1.0]` forces the VM to convert `1.0` to the string `"1.0"`, allocate memory, compute a hash, and perform a slow lookup routine.
-Use `tuple()`! It runs directly on top of memory layouts (Pointer Arithmetic) and accesses elements instantaneously.
+    # Modifier System
+    add_modifier(npc, "burning")
+    if has_modifier(npc, "burning") do
+        say("System", "The NPC is on fire!")
+    end
 
-⚠️ ERROR 4: STRING CONCATENATION INSIDE LARGE LOOPS
-The `str_concat()` function constructs a entirely NEW copy of the string in memory. 
-If you append 50,000 strings sequentially inside a loop, the VM will generate gigabytes of garbage data, causing the script to hang for up to 5 seconds.
-BAD:  `str = str_concat(str, "a")`
-GOOD: `str_append(str, "a")` (mutates the string in-place within 0.001 seconds).
-IDEAL: `buf_write(b, "a")` (operates via raw byte buffers for ultimate hardware speeds).
+===============================================================================
+VIII. ADVANCED EXAMPLES
+===============================================================================
 
-⚠️ ERROR 5: CALLING A VARIABLE AS A FUNCTION (OP_CALL FAILED)
-If you assign `val = nil` and accidentally invoke it as a function `val()`, the virtual machine will strictly crash with an "Cannot call variable or undefined function" exception. Always validate your dynamic objects with `check_null()` before invoking runtime callbacks!
+1. A REUSABLE TIMER CLASS (Using Dicts)
+------------------------------------------------------------
+    create_timer(duration) do
+        t = dict()
+        t.start = time()
+        t.duration = duration
+        t.is_expired() do
+            return (time() - t.start) >= t.duration
+        end
+        return t
+    end
+
+    my_timer = create_timer(5.0)
+    while my_timer.is_expired() == false do
+        # Wait...
+    end
+    print("Time is up!")
+
+2. STRING FORMATTING HELPER
+------------------------------------------------------------
+    format_player(p) do
+        res = buffer(100.0)
+        buf_write(res, "Player: ", p.name, " [HP: ", p.hp, "]")
+        return buf_string(res)
+    end
+
+    p1 = dict()
+    p1.name = "Arthur"
+    p1.hp = 100.0
+    print(format_player(p1))
+
+3. CALCULATING DISTANCE BETWEEN VECTORS
+------------------------------------------------------------
+    # Built-in distance() exists, but here is how it works manually:
+    v_dist(a, b) do
+        dx = b.x - a.x
+        dy = b.y - a.y
+        return sin(dx*dx + dy*dy) # (using sin as placeholder for sqrt in this logic)
+    end
+
+===============================================================================
+IX. WARNINGS AND COMMON ERRORS (MANDATORY READING)
+===============================================================================
+
+⚠️ ERROR 1: THE TUPLE INDEXING TRAP
+Most languages use 0-indexing. Neutralis uses 1-indexing for TUPLES 
+but 0-indexing for STRING SUBSTRINGS.
+
+    arr = tuple("A", "B")
+    print(arr[1.0]) # "A"
+    
+    s = "AB"
+    print(str_sub(s, 0.0, 1.0)) # "A"
+
+⚠️ ERROR 2: FORGOTTEN END IN INLINE FUNCTIONS
+Even single-line functions MUST close with `end`.
+
+    BAD:  sq(x) = x * x
+    GOOD: sq(x) = x * x end
+
+⚠️ ERROR 3: DICT KEY OVERHEAD
+Never use Dictionaries as Arrays. 
+
+    BAD:  d = dict() d["1"] = "x"  # Forces string conversion + hash
+    GOOD: t = tuple("x")          # Direct memory access
+
+⚠️ ERROR 4: CALLING NIL
+If you try to call a variable that contains `nil` as a function, 
+the VM will crash.
+
+    # UNSAFE
+    my_callback() 
+    
+    # SAFE
+    if check_null(my_callback) == false do
+        my_callback()
+    end
 
 
-============================================================
-7. BEST OPTIMIZATION PRACTICES
-============================================================
-1. PRE-ALLOCATING MEMORY: If you anticipate a massive string workload, initialize a `buffer(size)` to reserve the necessary RAM blocks upfront, shielding your engine from garbage collection (GC) cycles.
-2. EXPLICIT DOT ACCESS: Instead of utilizing `player["hp"]`, always prefer writing `player.hp`. Dot-notation compiles into dedicated instructions optimized via Inline Caching, bypassing hash-map lookups entirely (making it up to 10x faster).
-3. CLEANING INSTEAD OF RE-ALLOCATING: If you need to reset a large dictionary structure, do not declare `player = dict()` (which spawns an entirely new allocation memory layout). Use the `clean(player)` command instead. This preserves the persistent instance in memory but instantly clears its inner fields, heavily reducing garbage collection overhead.
+* VM Type: Register-based. Provides higher performance by reducing memory access.
+* Value Representation: 64-bit NaN Boxing. 
+  - Pointers use the lower 48 bits.
+  - Floats are native IEEE-754.
+  - Tags: Nil (1), False (2), True (3).
+* Garbage Collector: Non-compacting Mark-and-Sweep. Fast and predictable.
+* Hidden Classes: Dictionaries that share the same keys in the same 
+  order share a "Shape". This allows the VM to memorize the memory 
+  offset of a property, achieving C-like struct access speeds.
+
+===============================================================================
+XII. FAQ
+===============================================================================
+
+Q: Why is my loop running so slowly?
+A: Check if you are doing `print()` inside the loop or frequent 
+   string allocations. IO and Allocation are the slowest operations.
+
+Q: How do I load external libraries?
+A: Put your `.neu` files in `C:\NeuLibs\` and use `call("filename")`. 
+   Note: `call` runs the code in the global scope of the current VM.
+
+Q: Can I catch exceptions?
+A: Neutralis v2.0.2 does not support `try/catch`. Most errors are 
+   fatal to the current script to ensure engine stability. Use 
+   `assert()` to validate data early.
+
+Q: Is there a maximum stack depth?
+A: Yes, the stack is limited to 1024 slots for safety. Deep recursion 
+   might trigger a stack overflow.
+
+===============================================================================
+                               END OF DOCUMENT
+###############################################################################
